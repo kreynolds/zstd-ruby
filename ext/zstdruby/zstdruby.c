@@ -1,6 +1,9 @@
 #include <common.h>
 
 extern VALUE rb_mZstd;
+extern VALUE rb_cCContext;
+extern VALUE rb_cDContext;
+extern VALUE rb_cDDictionary;
 
 static VALUE zstdVersion(VALUE self)
 {
@@ -112,8 +115,13 @@ static VALUE decompress_buffered(const char* input_data, size_t input_size)
   return output_string;
 }
 
-static VALUE rb_decompress(VALUE self, VALUE input_value)
+static VALUE rb_decompress(int argc, VALUE *argv, VALUE self)
 {
+  VALUE input_value;
+  VALUE context;
+  VALUE dict;
+  rb_scan_args(argc, argv, "12", &input_value, &context, &dict);
+
   StringValue(input_value);
   char* input_data = RSTRING_PTR(input_value);
   size_t input_size = RSTRING_LEN(input_value);
@@ -128,8 +136,32 @@ static VALUE rb_decompress(VALUE self, VALUE input_value)
 
   VALUE output = rb_str_new(NULL, uncompressed_size);
   char* output_data = RSTRING_PTR(output);
-  size_t const decompress_size = ZSTD_decompress((void*)output_data, uncompressed_size,
-                                           (void*)input_data, input_size);
+
+  size_t decompress_size;
+  if (NIL_P(dict)) {
+    if (NIL_P(context)) {
+      decompress_size = ZSTD_decompress((void*)output_data, uncompressed_size,
+                                               (void*)input_data, input_size);
+    } else {
+      ZSTD_DCtx *dctx;
+      Data_Get_Struct(context, ZSTD_DCtx, dctx);
+      decompress_size = ZSTD_decompressDCtx(dctx, (void*)output_data, uncompressed_size,
+                                               (void*)input_data, input_size);
+    }
+  } else {
+    ZSTD_DDict *ddict;
+    ZSTD_DCtx *dctx;
+
+    if (NIL_P(context)) {
+      dctx = ZSTD_createDCtx();
+    } else {
+      Data_Get_Struct(context, ZSTD_DCtx, dctx);
+    }
+    Data_Get_Struct(dict, ZSTD_DDict, ddict);
+
+    decompress_size = ZSTD_decompress_usingDDict(dctx, (void*)output_data, uncompressed_size,
+                                               (void*)input_data, input_size, ddict);
+  }
 
   if (ZSTD_isError(decompress_size)) {
     rb_raise(rb_eRuntimeError, "%s: %s", "decompress error", ZSTD_getErrorName(decompress_size));
@@ -193,6 +225,6 @@ zstd_ruby_init(void)
   rb_define_module_function(rb_mZstd, "zstd_version", zstdVersion, 0);
   rb_define_module_function(rb_mZstd, "compress", rb_compress, -1);
   rb_define_module_function(rb_mZstd, "compress_using_dict", rb_compress_using_dict, -1);
-  rb_define_module_function(rb_mZstd, "decompress", rb_decompress, 1);
+  rb_define_module_function(rb_mZstd, "decompress", rb_decompress, -1);
   rb_define_module_function(rb_mZstd, "decompress_using_dict", rb_decompress_using_dict, -1);
 }
