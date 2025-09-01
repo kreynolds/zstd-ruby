@@ -107,7 +107,7 @@ no_compress(struct streaming_compress_t* sc, ZSTD_EndDirective endOp)
 
     size_t const ret = zstd_stream_compress(sc->ctx, &output, &input, endOp, false);
     if (ZSTD_isError(ret)) {
-      rb_raise(rb_eRuntimeError, "flush error error code: %s", ZSTD_getErrorName(ret));
+      rb_raise(rb_eRuntimeError, "flush error code: %s", ZSTD_getErrorName(ret));
     }
     rb_str_cat(result, output.dst, output.pos);
   } while (ret > 0);
@@ -131,7 +131,7 @@ rb_streaming_compress_compress(VALUE obj, VALUE src)
     ZSTD_outBuffer output = { (void*)output_data, sc->buf_size, 0 };
     size_t const ret = zstd_stream_compress(sc->ctx, &output, &input, ZSTD_e_continue, false);
     if (ZSTD_isError(ret)) {
-      rb_raise(rb_eRuntimeError, "compress error error code: %s", ZSTD_getErrorName(ret));
+      rb_raise(rb_eRuntimeError, "compress error code: %s", ZSTD_getErrorName(ret));
     }
     rb_str_cat(result, output.dst, output.pos);
   }
@@ -158,7 +158,7 @@ rb_streaming_compress_write(int argc, VALUE *argv, VALUE obj)
       ZSTD_outBuffer output = { (void*)output_data, sc->buf_size, 0 };
       size_t const ret = zstd_stream_compress(sc->ctx, &output, &input, ZSTD_e_continue, false);
       if (ZSTD_isError(ret)) {
-        rb_raise(rb_eRuntimeError, "compress error error code: %s", ZSTD_getErrorName(ret));
+        rb_raise(rb_eRuntimeError, "compress error code: %s", ZSTD_getErrorName(ret));
       }
       total += RSTRING_LEN(str);
     }

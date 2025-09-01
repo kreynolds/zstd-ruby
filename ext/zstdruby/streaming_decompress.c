@@ -106,7 +106,7 @@ rb_streaming_decompress_decompress(VALUE obj, VALUE src)
     ZSTD_outBuffer output = { (void*)output_data, sd->buf_size, 0 };
     size_t const ret = zstd_stream_decompress(sd->dctx, &output, &input, false);
     if (ZSTD_isError(ret)) {
-      rb_raise(rb_eRuntimeError, "decompress error error code: %s", ZSTD_getErrorName(ret));
+      rb_raise(rb_eRuntimeError, "decompress error code: %s", ZSTD_getErrorName(ret));
     }
     rb_str_cat(result, output.dst, output.pos);
   }
@@ -128,7 +128,7 @@ rb_streaming_decompress_decompress_with_pos(VALUE obj, VALUE src)
   ZSTD_outBuffer output = { (void*)output_data, sd->buf_size, 0 };
   size_t const ret = zstd_stream_decompress(sd->dctx, &output, &input, false);
   if (ZSTD_isError(ret)) {
-    rb_raise(rb_eRuntimeError, "decompress error error code: %s", ZSTD_getErrorName(ret));
+    rb_raise(rb_eRuntimeError, "decompress error code: %s", ZSTD_getErrorName(ret));
   }
   rb_str_cat(result, output.dst, output.pos);
   return rb_ary_new_from_args(2, result, ULONG2NUM(input.pos));
