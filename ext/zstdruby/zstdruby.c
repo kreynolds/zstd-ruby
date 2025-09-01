@@ -25,8 +25,11 @@ static VALUE rb_compress(int argc, VALUE *argv, VALUE self)
   char* input_data = RSTRING_PTR(input_value);
   size_t input_size = RSTRING_LEN(input_value);
 
-  size_t max_compressed_size = ZSTD_compressBound(input_size);
-  VALUE output = rb_str_new(NULL, max_compressed_size);
+   size_t max_compressed_size = ZSTD_compressBound(input_size);
+   if (ZSTD_isError(max_compressed_size)) {
+     rb_raise(rb_eRuntimeError, "Input size too large: %s", ZSTD_getErrorName(max_compressed_size));
+   }
+   VALUE output = rb_str_new(NULL, max_compressed_size);
   char* output_data = RSTRING_PTR(output);
 
   size_t const ret = zstd_compress(ctx, output_data, max_compressed_size, input_data, input_size, false);
@@ -46,7 +49,7 @@ VALUE decompress_buffered(ZSTD_DCtx* dctx, const char* input_data, size_t input_
 
   while (input.pos < input.size) {
     ZSTD_outBuffer output = { NULL, 0, 0 };
-    output.size += ZSTD_DStreamOutSize();
+    output.size = ZSTD_DStreamOutSize();
     VALUE output_string = rb_str_new(NULL, output.size);
     output.dst = RSTRING_PTR(output_string);
 

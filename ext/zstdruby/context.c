@@ -136,8 +136,11 @@ static VALUE zstd_ccontext_compress(VALUE self, VALUE input_value)
     ctx->needs_reset = 0;
   }
 
-  size_t max_compressed_size = ZSTD_compressBound(input_size);
-  VALUE output = rb_str_new(NULL, max_compressed_size);
+   size_t max_compressed_size = ZSTD_compressBound(input_size);
+   if (ZSTD_isError(max_compressed_size)) {
+     rb_raise(rb_eRuntimeError, "Input size too large: %s", ZSTD_getErrorName(max_compressed_size));
+   }
+   VALUE output = rb_str_new(NULL, max_compressed_size);
   char* output_data = RSTRING_PTR(output);
 
   size_t compressed_size;
