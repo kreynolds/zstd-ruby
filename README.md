@@ -144,7 +144,7 @@ res << stream.finish
 
 #### Streaming Compression with CDict of level 5
 ```ruby
-cdict = Zstd::CDict.new(File.read('dictionary_file', 5)
+cdict = Zstd::CDict.new(File.read('dictionary_file'), 5)
 stream = Zstd::StreamingCompress.new(dict: cdict)
 stream << "abc" << "def"
 res = stream.flush
@@ -164,8 +164,8 @@ data = Zstd.decompress(compressed_data, dict: dictionary)
 If you use the same dictionary repeatedly, you can speed up the setup by creating DDict in advance:
 
 ```ruby
-ddict = Zstd::Ddict.new(File.read('dictionary_file'))
-data = Zstd.compress(compressed_using_dict, ddict)
+ddict = Zstd::DDict.new(File.read('dictionary_file'))
+data = Zstd.decompress(compressed_using_dict, dict: ddict)
 ```
 
 #### Streaming Decompression
@@ -176,6 +176,27 @@ result = ''
 result << stream.decompress(cstr[0, 10])
 result << stream.decompress(cstr[10..-1])
 ```
+
+### Skippable Frames
+
+Skippable frames allow you to embed metadata that will be ignored by standard zstd decompression:
+
+```ruby
+# Write a skippable frame with data and metadata
+input_data = "Some data to compress later"
+metadata = "This is metadata"
+frame_with_data = Zstd.write_skippable_frame(input_data, metadata)
+
+# Read the metadata from the skippable frame
+extracted_metadata = Zstd.read_skippable_frame(frame_with_data)
+puts extracted_metadata  # => "This is metadata"
+
+# With magic variant (0-15)
+frame_variant = Zstd.write_skippable_frame(input_data, metadata, magic_variant: 1)
+```
+
+**Note**: `write_skippable_frame` prepends the skippable frame to your input data. The result contains both the frame and your original data.
+
 ## API Reference
 
 ### Context Classes
@@ -212,6 +233,40 @@ dctx = Zstd::DContext.new(dict: dictionary)          # With dictionary
 
 - `decompress(compressed_data)` → String
 
+### Streaming Classes
+
+#### `Zstd::StreamingCompress`
+For streaming compression operations.
+
+```ruby
+stream = Zstd::StreamingCompress.new                              # Default settings
+stream = Zstd::StreamingCompress.new(level: 6)                    # With compression level
+stream = Zstd::StreamingCompress.new(dict: dictionary)            # With dictionary
+stream = Zstd::StreamingCompress.new(level: 6, dict: dictionary)  # With both
+```
+
+**Methods:**
+- `<<(data)` → self (chainable append)
+- `compress(data)` → String (compress and return data immediately)
+- `write(*data)` → Integer (append multiple strings, return total bytes written)
+- `print(*args)` → nil (same as Ruby IO#print)
+- `puts(*args)` → nil (same as Ruby IO#puts)
+- `printf(format, *args)` → nil (same as Ruby IO#printf)
+- `flush()` → String (flush internal buffers, return compressed data)
+- `finish()` → String (finalize compression, return remaining compressed data)
+
+#### `Zstd::StreamingDecompress`
+For streaming decompression operations.
+
+```ruby
+stream = Zstd::StreamingDecompress.new                # Default settings
+stream = Zstd::StreamingDecompress.new(dict: dictionary) # With dictionary
+```
+
+**Methods:**
+- `decompress(compressed_data)` → String
+- `decompress_with_pos(compressed_data)` → [String, Integer] (returns data and bytes consumed)
+
 ### Module Methods
 
 #### Compression
@@ -221,6 +276,10 @@ dctx = Zstd::DContext.new(dict: dictionary)          # With dictionary
 #### Decompression
 - `Zstd.decompress(compressed_data)` → String
 - `Zstd.decompress(compressed_data, dict: dictionary)` → String
+
+#### Skippable Frames
+- `Zstd.write_skippable_frame(data, metadata, magic_variant: 0)` → String
+- `Zstd.read_skippable_frame(frame_data)` → String or nil
 
 #### Utilities
 - `Zstd.zstd_version` → Integer
