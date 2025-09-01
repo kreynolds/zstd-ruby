@@ -107,6 +107,29 @@ RSpec.describe Zstd::StreamingCompress do
     end
   end
 
+  describe 'write method' do
+    it 'returns correct byte count' do
+      sc = Zstd::StreamingCompress.new
+
+      data1 = "Hello"
+      data2 = "World"
+
+      bytes1 = sc.write(data1)
+      bytes2 = sc.write(data2)
+
+      expect(bytes1).to eq(data1.bytesize)
+      expect(bytes2).to eq(data2.bytesize)
+    end
+
+    it 'accepts multiple arguments' do
+      sc = Zstd::StreamingCompress.new
+
+      total_bytes = sc.write("Hello", " ", "World")
+
+      expect(total_bytes).to eq(11) # "Hello" + " " + "World"
+    end
+  end
+
   if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('3.0.0')
     describe 'Ractor' do
       it 'should be supported' do

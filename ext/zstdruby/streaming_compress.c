@@ -142,7 +142,6 @@ static VALUE
 rb_streaming_compress_write(int argc, VALUE *argv, VALUE obj)
 {
   size_t total = 0;
-  VALUE result = rb_str_new(0, 0);
   struct streaming_compress_t* sc;
   TypedData_Get_Struct(obj, struct streaming_compress_t, &streaming_compress_type, sc);
   const char* output_data = RSTRING_PTR(sc->buf);

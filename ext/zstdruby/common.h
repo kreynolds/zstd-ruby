@@ -137,7 +137,7 @@ static void set_decompress_params(ZSTD_DCtx* const dctx, VALUE kwargs)
       size_t load_dict_ret = ZSTD_DCtx_loadDictionary(dctx, dict_buffer, dict_size);
       if (ZSTD_isError(load_dict_ret)) {
         ZSTD_freeDCtx(dctx);
-        rb_raise(rb_eRuntimeError, "%s", "ZSTD_CCtx_loadDictionary failed");
+        rb_raise(rb_eRuntimeError, "%s", "ZSTD_DCtx_loadDictionary failed");
       }
     } else {
       ZSTD_freeDCtx(dctx);

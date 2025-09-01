@@ -1,4 +1,5 @@
 #include "common.h"
+#include <string.h>
 
 extern VALUE rb_mZstd;
 
@@ -22,15 +23,28 @@ static VALUE rb_write_skippable_frame(int argc, VALUE *argv, VALUE self)
   char* skip_data = RSTRING_PTR(skip_value);
   size_t skip_size = RSTRING_LEN(skip_value);
 
-  size_t dst_size = input_size + ZSTD_SKIPPABLEHEADERSIZE + skip_size;
-  VALUE output = rb_str_new(input_data, dst_size);
-  char* output_data = RSTRING_PTR(output);
-  size_t output_size = ZSTD_writeSkippableFrame((void*)output_data, dst_size, (const void*)skip_data, skip_size, magic_variant);
-  if (ZSTD_isError(output_size)) {
-    rb_raise(rb_eRuntimeError, "%s: %s", "write skippable frame failed", ZSTD_getErrorName(output_size));
+  // Check for integer overflow
+  if (skip_size > SIZE_MAX - ZSTD_SKIPPABLEHEADERSIZE ||
+      input_size > SIZE_MAX - ZSTD_SKIPPABLEHEADERSIZE - skip_size) {
+    rb_raise(rb_eRuntimeError, "Input size too large - would cause integer overflow");
   }
 
-  rb_str_resize(output, output_size);
+  // Allocate space for the complete output (frame + input) upfront
+  size_t dst_size = input_size + ZSTD_SKIPPABLEHEADERSIZE + skip_size;
+  VALUE output = rb_str_new(NULL, dst_size);
+  char* output_data = RSTRING_PTR(output);
+
+  // Write the skippable frame at the beginning
+  size_t frame_size = ZSTD_writeSkippableFrame((void*)output_data, dst_size, (const void*)skip_data, skip_size, magic_variant);
+  if (ZSTD_isError(frame_size)) {
+    rb_raise(rb_eRuntimeError, "%s: %s", "write skippable frame failed", ZSTD_getErrorName(frame_size));
+  }
+
+  // Copy input data directly after the frame
+  memcpy(output_data + frame_size, input_data, input_size);
+
+  // Resize to actual total size
+  rb_str_resize(output, frame_size + input_size);
   return output;
 }
 
