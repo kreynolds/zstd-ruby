@@ -4,6 +4,7 @@ struct streaming_compress_t {
   ZSTD_CCtx* ctx;
   VALUE buf;
   size_t buf_size;
+  VALUE accumulated_data;
 };
 
 static void
@@ -12,8 +13,10 @@ streaming_compress_mark(void *p)
   struct streaming_compress_t *sc = p;
 #ifdef HAVE_RB_GC_MARK_MOVABLE
   rb_gc_mark_movable(sc->buf);
+  rb_gc_mark_movable(sc->accumulated_data);
 #else
   rb_gc_mark(sc->buf);
+  rb_gc_mark(sc->accumulated_data);
 #endif
 }
 
@@ -40,6 +43,7 @@ streaming_compress_compact(void *p)
 {
   struct streaming_compress_t *sc = p;
   sc->buf = rb_gc_location(sc->buf);
+  sc->accumulated_data = rb_gc_location(sc->accumulated_data);
 }
 #endif
 
@@ -64,6 +68,7 @@ rb_streaming_compress_allocate(VALUE klass)
   sc->ctx = NULL;
   sc->buf = Qnil;
   sc->buf_size = 0;
+  sc->accumulated_data = Qnil;
   return obj;
 }
 
@@ -86,6 +91,7 @@ rb_streaming_compress_initialize(int argc, VALUE *argv, VALUE obj)
   sc->ctx = ctx;
   sc->buf = rb_str_new(NULL, buffOutSize);
   sc->buf_size = buffOutSize;
+  sc->accumulated_data = rb_str_new(0, 0);
 
   return obj;
 }
@@ -159,6 +165,8 @@ rb_streaming_compress_write(int argc, VALUE *argv, VALUE obj)
       if (ZSTD_isError(ret)) {
         rb_raise(rb_eRuntimeError, "compress error code: %s", ZSTD_getErrorName(ret));
       }
+      // Accumulate the compressed output
+      rb_str_cat(sc->accumulated_data, output.dst, output.pos);
     }
     total += input_size;
   }
@@ -191,7 +199,17 @@ rb_streaming_compress_flush(VALUE obj)
 {
   struct streaming_compress_t* sc;
   TypedData_Get_Struct(obj, struct streaming_compress_t, &streaming_compress_type, sc);
-  VALUE result = no_compress(sc, ZSTD_e_flush);
+
+  // Get any remaining flush data
+  VALUE flush_data = no_compress(sc, ZSTD_e_flush);
+
+  // Combine accumulated data with flush data
+  VALUE result = rb_str_dup(sc->accumulated_data);
+  rb_str_cat(result, RSTRING_PTR(flush_data), RSTRING_LEN(flush_data));
+
+  // Clear the accumulated data
+  rb_str_resize(sc->accumulated_data, 0);
+
   return result;
 }
 
@@ -200,7 +218,17 @@ rb_streaming_compress_finish(VALUE obj)
 {
   struct streaming_compress_t* sc;
   TypedData_Get_Struct(obj, struct streaming_compress_t, &streaming_compress_type, sc);
-  VALUE result = no_compress(sc, ZSTD_e_end);
+
+  // Get final frame data
+  VALUE final_data = no_compress(sc, ZSTD_e_end);
+
+  // Combine accumulated data with final data
+  VALUE result = rb_str_dup(sc->accumulated_data);
+  rb_str_cat(result, RSTRING_PTR(final_data), RSTRING_LEN(final_data));
+
+  // Clear the accumulated data
+  rb_str_resize(sc->accumulated_data, 0);
+
   return result;
 }
 

@@ -143,3 +143,200 @@ RSpec.describe Zstd::StreamingCompress do
     end
   end
 end
+
+describe 'edge cases' do
+  it 'handles empty string' do
+    stream = Zstd::StreamingCompress.new
+    stream << ""
+    res = stream.finish
+    expect(Zstd.decompress(res)).to eq('')
+  end
+
+  it 'handles very small data' do
+    stream = Zstd::StreamingCompress.new
+    stream << "a"
+    res = stream.finish
+    expect(Zstd.decompress(res)).to eq('a')
+  end
+
+  it 'handles large data' do
+    large_data = "x" * 100_000
+    stream = Zstd::StreamingCompress.new
+    stream << large_data
+    res = stream.finish
+    expect(Zstd.decompress(res)).to eq(large_data)
+  end
+
+  it 'handles multiple empty strings' do
+    stream = Zstd::StreamingCompress.new
+    stream << "" << "" << ""
+    res = stream.finish
+    expect(Zstd.decompress(res)).to eq('')
+  end
+end
+
+describe 'flush and finish behavior' do
+  it 'handles flush followed by more data and finish' do
+    stream = Zstd::StreamingCompress.new
+    stream << "abc"
+    flushed = stream.flush
+    stream << "def"
+    finished = stream.finish
+
+    combined = flushed + finished
+    expect(Zstd.decompress(combined)).to eq('abcdef')
+  end
+
+  it 'handles multiple flushes' do
+    stream = Zstd::StreamingCompress.new
+    stream << "abc"
+    flush1 = stream.flush
+    stream << "def"
+    flush2 = stream.flush
+    finished = stream.finish
+
+    combined = flush1 + flush2 + finished
+    expect(Zstd.decompress(combined)).to eq('abcdef')
+  end
+
+  it 'handles finish after flush with no additional data' do
+    stream = Zstd::StreamingCompress.new
+    stream << "abc"
+    flushed = stream.flush
+    finished = stream.finish
+
+    combined = flushed + finished
+    expect(Zstd.decompress(combined)).to eq('abc')
+  end
+end
+
+describe 'chunk size variations' do
+  it 'handles very small chunks' do
+    data = "hello world"
+    stream = Zstd::StreamingCompress.new
+
+    # Write one character at a time
+    data.each_char { |c| stream << c }
+
+    res = stream.finish
+    expect(Zstd.decompress(res)).to eq(data)
+  end
+
+  it 'handles mixed chunk sizes' do
+    stream = Zstd::StreamingCompress.new
+
+    # Mix different chunk sizes
+    stream << "a"      # 1 byte
+    stream << "bc"     # 2 bytes
+    stream << "def"    # 3 bytes
+    stream << "ghij"   # 4 bytes
+
+    res = stream.finish
+    expect(Zstd.decompress(res)).to eq('abcdefghij')
+  end
+end
+
+describe 'error handling' do
+  it 'handles nil input gracefully' do
+    stream = Zstd::StreamingCompress.new
+    expect { stream << nil }.to raise_error(TypeError)
+  end
+
+  it 'handles non-string input' do
+    stream = Zstd::StreamingCompress.new
+    expect { stream << 123 }.to raise_error(TypeError)
+  end
+
+  it 'handles very large input without crashing' do
+    # This test ensures the streaming compressor can handle large inputs
+    # without running out of memory or crashing
+    large_data = "x" * 1000000  # 1MB of data
+    stream = Zstd::StreamingCompress.new
+
+    # This should not raise an error
+    expect {
+      stream << large_data
+      result = stream.finish
+      expect(result).to be_a(String)
+      expect(result.length).to be > 0
+    }.not_to raise_error
+  end
+
+  it 'handles multiple finish calls gracefully' do
+    stream = Zstd::StreamingCompress.new
+    stream << "test data"
+    result1 = stream.finish
+
+    # Second finish should work (though may return empty data)
+    expect { stream.finish }.not_to raise_error
+  end
+end
+
+describe 'binary data handling' do
+  it 'handles binary data correctly' do
+    # Create binary data with null bytes and high-bit characters
+    binary_data = "\x00\x01\x02\xFF\xFE\xFD" + "text data" + "\x00\x01"
+
+    stream = Zstd::StreamingCompress.new
+    stream << binary_data
+    compressed = stream.finish
+
+    # Verify it can be decompressed back correctly
+    decompressed = Zstd.decompress(compressed)
+    expect(decompressed.bytes).to eq(binary_data.bytes)
+    expect(decompressed.length).to eq(binary_data.length)
+  end
+
+  it 'handles UTF-8 data with multi-byte characters' do
+    utf8_data = "Hello 世界 🌍 Test"
+
+    stream = Zstd::StreamingCompress.new
+    stream << utf8_data
+    compressed = stream.finish
+
+    decompressed = Zstd.decompress(compressed)
+    # Zstd preserves binary data, so encoding may change but content should be same
+    expect(decompressed.force_encoding('UTF-8')).to eq(utf8_data)
+    expect(decompressed.length).to eq(utf8_data.length)
+  end
+end
+
+describe 'concurrent operations' do
+  it 'handles multiple streams simultaneously' do
+    # Create multiple streaming compressors
+    streams = []
+    results = []
+
+    5.times do |i|
+      stream = Zstd::StreamingCompress.new
+      stream << "data for stream #{i}"
+      results << stream.finish
+      streams << stream
+    end
+
+    # Verify all streams produced valid compressed data
+    results.each_with_index do |compressed, i|
+      decompressed = Zstd.decompress(compressed)
+      expect(decompressed).to eq("data for stream #{i}")
+    end
+  end
+
+  it 'handles interleaved operations' do
+    stream1 = Zstd::StreamingCompress.new
+    stream2 = Zstd::StreamingCompress.new
+
+    # Interleave operations between two streams
+    stream1 << "hello"
+    stream2 << "world"
+    stream1 << " "
+    stream2 << " "
+    stream1 << "from"
+    stream2 << "test"
+
+    result1 = stream1.finish
+    result2 = stream2.finish
+
+    expect(Zstd.decompress(result1)).to eq('hello from')
+    expect(Zstd.decompress(result2)).to eq('world test')
+  end
+end
