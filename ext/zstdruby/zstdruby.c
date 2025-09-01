@@ -156,7 +156,7 @@ static VALUE rb_cdict_initialize(int argc, VALUE *argv, VALUE self)
 
 static VALUE rb_ddict_alloc(VALUE self)
 {
-  ZSTD_CDict* ddict = NULL;
+  ZSTD_DDict* ddict = NULL;
   return TypedData_Wrap_Struct(self, &ddict_type, ddict);
 }
 
