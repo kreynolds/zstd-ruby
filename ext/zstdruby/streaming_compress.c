@@ -160,8 +160,8 @@ rb_streaming_compress_write(int argc, VALUE *argv, VALUE obj)
       if (ZSTD_isError(ret)) {
         rb_raise(rb_eRuntimeError, "compress error code: %s", ZSTD_getErrorName(ret));
       }
-      total += RSTRING_LEN(str);
     }
+    total += input_size;
   }
   return SIZET2NUM(total);
 }
